@@ -17,7 +17,7 @@ export async function POST(request) {
             messages: [
                 {
                     role: "system",
-                    content: `You are a precise summariser. Write a concise summary in 2-3 sentences. Keep it under ${maxLength || 80} words.`,
+                    content: `You are a precise summariser. Write a concise summary in 2-4 sentences. Keep it under ${maxLength || 80} words.`,
                 },
                 {
                     role: "user",

@@ -1,7 +1,5 @@
 "use client";
-import { useState } from "react";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+import { useState, useEffect, useRef } from "react";
 
 export default function Home() {
   const [query, setQuery] = useState("");
@@ -9,27 +7,121 @@ export default function Home() {
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  
+  // ---- Premium Features States ----
+  const [searchTime, setSearchTime] = useState(null);
+  const [history, setHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [theme, setTheme] = useState("system"); // 'system', 'light', 'dark'
+  const [copiedLink, setCopiedLink] = useState(null);
+  
+  const historyRef = useRef(null);
 
   // ---- Summariser states ----
-  const [summarisingIndex, setSummarisingIndex] = useState(null);  // which result is being summarised
-  const [summaryMap, setSummaryMap] = useState({});                // store summaries by index
+  const [summarisingIndex, setSummarisingIndex] = useState(null);
+  const [summaryMap, setSummaryMap] = useState({});
 
-  const handleChange = (e) => setQuery(e.target.value);
+  // Initialize theme & history on mount
+  useEffect(() => {
+    // Load History
+    const savedHistory = localStorage.getItem("searchlifyHistory");
+    if (savedHistory) {
+      setHistory(JSON.parse(savedHistory));
+    }
 
-  const handleSearch = async () => {
-    if (!query.trim()) return;
+    // Load Theme preference
+    const savedTheme = localStorage.getItem("searchlifyTheme");
+    if (savedTheme) {
+      setTheme(savedTheme);
+      applyTheme(savedTheme);
+    } else {
+      applyTheme("system");
+    }
+
+    // Close history dropdown when clicking outside
+    const handleClickOutside = (event) => {
+      if (historyRef.current && !historyRef.current.contains(event.target)) {
+        setShowHistory(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const applyTheme = (newTheme) => {
+    if (newTheme === "dark") {
+      document.documentElement.classList.add("dark-theme");
+      document.documentElement.classList.remove("light-theme");
+    } else if (newTheme === "light") {
+      document.documentElement.classList.add("light-theme");
+      document.documentElement.classList.remove("dark-theme");
+    } else {
+      document.documentElement.classList.remove("dark-theme", "light-theme");
+    }
+  };
+
+  const toggleTheme = () => {
+    let nextTheme = "light";
+    if (theme === "light") nextTheme = "dark";
+    if (theme === "dark") nextTheme = "system";
+    
+    setTheme(nextTheme);
+    localStorage.setItem("searchlifyTheme", nextTheme);
+    applyTheme(nextTheme);
+  };
+
+  const handleChange = (e) => {
+    setQuery(e.target.value);
+    setShowHistory(true);
+  };
+
+  const addToHistory = (searchQuery) => {
+    if (!searchQuery.trim()) return;
+    const newHistory = [searchQuery, ...history.filter(q => q !== searchQuery)].slice(0, 5);
+    setHistory(newHistory);
+    localStorage.setItem("searchlifyHistory", JSON.stringify(newHistory));
+  };
+
+  const clearHistory = (e) => {
+    e.stopPropagation();
+    setHistory([]);
+    localStorage.removeItem("searchlifyHistory");
+    setShowHistory(false);
+  };
+
+  const selectHistoryItem = (item) => {
+    setQuery(item);
+    setShowHistory(false);
+    // trigger search with new query
+    performSearch(item);
+  };
+
+  const handleSearch = () => {
+    performSearch(query);
+  };
+
+  const performSearch = async (searchQuery) => {
+    if (!searchQuery.trim()) return;
     setLoading(true);
     setError("");
     setResults([]);
-    setSummaryMap({});   // clear old summaries
+    setSummaryMap({});
+    setShowHistory(false);
+    addToHistory(searchQuery);
+
+    const startTime = performance.now();
 
     try {
-      const response = await fetch(`${API_URL}/search`, {
+      const response = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, engine }),
+        body: JSON.stringify({ query: searchQuery, engine }),
       });
       const data = await response.json();
+      
+      const endTime = performance.now();
+      setSearchTime(((endTime - startTime) / 1000).toFixed(2));
+
       if (data.results && Array.isArray(data.results)) {
         setResults(data.results);
       } else {
@@ -42,7 +134,6 @@ export default function Home() {
     }
   };
 
-  // ---- Summarise a single result ----
   const handleSummarise = async (index, snippet) => {
     if (!snippet || snippet.length < 50) {
       setSummaryMap(prev => ({ ...prev, [index]: "Text too short to summarise." }));
@@ -50,7 +141,7 @@ export default function Home() {
     }
     setSummarisingIndex(index);
     try {
-      const resp = await fetch(`${API_URL}/summarize`, {
+      const resp = await fetch("/api/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: snippet, maxLength: 80 }),
@@ -70,6 +161,16 @@ export default function Home() {
     }
   };
 
+  const copyToClipboard = async (link, index) => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopiedLink(index);
+      setTimeout(() => setCopiedLink(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy!', err);
+    }
+  };
+
   const getDomain = (url) => {
     try {
       return new URL(url).hostname.replace("www.", "");
@@ -84,6 +185,11 @@ export default function Home() {
 
   return (
     <main className="search-app-container">
+      {/* Theme Toggle Button */}
+      <button onClick={toggleTheme} className="theme-toggle" aria-label="Toggle theme">
+        {theme === 'light' ? '☀️' : theme === 'dark' ? '🌙' : '💻'}
+      </button>
+
       <div className="searchbar">
         <div className="logo-section">
           <div className="logo-badge">AI</div>
@@ -92,7 +198,7 @@ export default function Home() {
         <h3 className="txt2">Your Personal AI Powered Search Engine</h3>
 
         <div className="search-box-unified">
-          <div className="input-wrapper">
+          <div className="input-wrapper" ref={historyRef}>
             <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -100,11 +206,32 @@ export default function Home() {
             <input
               className="searchlify-input"
               onChange={handleChange}
+              onFocus={() => setShowHistory(true)}
               value={query}
               type="text"
               placeholder="Ask anything..."
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             />
+            
+            {/* Search History Dropdown */}
+            {showHistory && history.length > 0 && (
+              <div className="history-dropdown">
+                <div className="history-header">
+                  <span>Recent Searches</span>
+                  <button onClick={clearHistory} className="clear-history-btn">Clear</button>
+                </div>
+                {history.map((item, idx) => (
+                  <div key={idx} className="history-item" onClick={() => selectHistoryItem(item)}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="history-icon">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <polyline points="12 6 12 12 16 14"></polyline>
+                    </svg>
+                    <span>{item}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {query && (
               <button className="clear-btn" onClick={handleClear} aria-label="Clear query">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -154,6 +281,13 @@ export default function Home() {
         </div>
       )}
 
+      {/* Metadata Badge */}
+      {!loading && results.length > 0 && (
+        <div className="metadata-badge fade-in">
+          Found {results.length} results in {searchTime}s
+        </div>
+      )}
+
       {loading && results.length === 0 && (
         <div className="skeleton-container">
           {[1, 2, 3].map((n) => (
@@ -172,19 +306,41 @@ export default function Home() {
           const domain = getDomain(result.link);
           return (
             <div key={index} className="result-card fade-in" style={{ animationDelay: `${index * 50}ms` }}>
-              {domain && (
-                <div className="result-meta">
-                  <img
-                    src={`https://www.google.com/s2/favicons?sz=64&domain=${domain}`}
-                    alt=""
-                    className="result-favicon"
-                    onError={(e) => {
-                      e.target.style.display = "none";
-                    }}
-                  />
-                  <span className="result-domain">{domain}</span>
-                </div>
-              )}
+              <div className="result-header-row">
+                {domain && (
+                  <div className="result-meta">
+                    <img
+                      src={`https://www.google.com/s2/favicons?sz=64&domain=${domain}`}
+                      alt=""
+                      className="result-favicon"
+                      onError={(e) => {
+                        e.target.style.display = "none";
+                      }}
+                    />
+                    <span className="result-domain">{domain}</span>
+                  </div>
+                )}
+                
+                {/* Copy Link Button */}
+                <button 
+                  className="copy-btn" 
+                  onClick={() => copyToClipboard(result.link, index)}
+                  aria-label="Copy link"
+                  title="Copy Link"
+                >
+                  {copiedLink === index ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" className="copied-icon">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                  )}
+                </button>
+              </div>
+
               <h2 className="result-title">
                 <a href={result.link} target="_blank" rel="noopener noreferrer">
                   {result.title}

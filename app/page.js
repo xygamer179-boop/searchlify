@@ -3,18 +3,18 @@ import { useState, useEffect, useRef } from "react";
 
 export default function Home() {
   const [query, setQuery] = useState("");
-  const [engine, setEngine] = useState("duckduckgo");
+  const [engine, setEngine] = useState("searchlify");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  
+
   // ---- Premium Features States ----
   const [searchTime, setSearchTime] = useState(null);
   const [history, setHistory] = useState([]);
   const [showHistory, setShowHistory] = useState(false);
   const [theme, setTheme] = useState("system"); // 'system', 'light', 'dark'
   const [copiedLink, setCopiedLink] = useState(null);
-  
+
   const historyRef = useRef(null);
 
   // ---- Summariser states ----
@@ -64,7 +64,7 @@ export default function Home() {
     let nextTheme = "light";
     if (theme === "light") nextTheme = "dark";
     if (theme === "dark") nextTheme = "system";
-    
+
     setTheme(nextTheme);
     localStorage.setItem("searchlifyTheme", nextTheme);
     applyTheme(nextTheme);
@@ -118,7 +118,7 @@ export default function Home() {
         body: JSON.stringify({ query: searchQuery, engine }),
       });
       const data = await response.json();
-      
+
       const endTime = performance.now();
       setSearchTime(((endTime - startTime) / 1000).toFixed(2));
 
@@ -212,7 +212,7 @@ export default function Home() {
               placeholder="Ask anything..."
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
             />
-            
+
             {/* Search History Dropdown */}
             {showHistory && history.length > 0 && (
               <div className="history-dropdown">
@@ -320,10 +320,10 @@ export default function Home() {
                     <span className="result-domain">{domain}</span>
                   </div>
                 )}
-                
+
                 {/* Copy Link Button */}
-                <button 
-                  className="copy-btn" 
+                <button
+                  className="copy-btn"
                   onClick={() => copyToClipboard(result.link, index)}
                   aria-label="Copy link"
                   title="Copy Link"

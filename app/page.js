@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
 export default function Home() {
   const [query, setQuery] = useState("");
   const [engine, setEngine] = useState("duckduckgo");
@@ -22,7 +24,7 @@ export default function Home() {
     setSummaryMap({});   // clear old summaries
 
     try {
-      const response = await fetch("http://localhost:4000/search", {
+      const response = await fetch(`${API_URL}/search`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query, engine }),
@@ -48,7 +50,7 @@ export default function Home() {
     }
     setSummarisingIndex(index);
     try {
-      const resp = await fetch("http://localhost:4000/summarize", {
+      const resp = await fetch(`${API_URL}/summarize`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: snippet, maxLength: 80 }),
